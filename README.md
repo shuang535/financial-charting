@@ -1,10 +1,7 @@
 # Financial Charting
 
-Private Codex skill for reproducible macroeconomic and financial research
-charts and backtest tables built with Python, pandas, and Matplotlib.
-
-This repository is private/internal tooling. Do not redistribute it without
-the repository owner's approval.
+Codex skill for reproducible macroeconomic and financial research charts and
+backtest tables built with Python, pandas, and Matplotlib.
 
 ## Install
 
@@ -23,8 +20,9 @@ Restart the Codex session after installation so the skill is discovered.
 git -C "$env:USERPROFILE\.codex\skills\financial-charting" pull --ff-only
 ```
 
-Authentication should use the operating system's Git credential manager. Do
-not store a GitHub token in this repository or in a tracked file.
+Cloning this public repository does not require a token. Contributors should
+use the operating system's Git credential manager for authenticated pushes and
+must not store a GitHub token in this repository or in a tracked file.
 
 ## Development checks
 
@@ -33,6 +31,10 @@ python -X utf8 -m pytest
 python -X utf8 <skill-creator-path>\scripts\quick_validate.py .
 ```
 
-The optional `assets/cathaysite.mplstyle` file provides the internal chart
-palette and typography. Chart helpers do not add a data source or organization
+The optional `assets/cathaysite.mplstyle` file provides a chart palette and
+typography. Chart helpers do not add a data source or organization
 suffix unless the caller supplies one explicitly.
+
+## License
+
+Released under the [MIT License](LICENSE).
