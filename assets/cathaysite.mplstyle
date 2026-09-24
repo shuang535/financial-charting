@@ -1,0 +1,17 @@
+figure.facecolor: white
+axes.facecolor: white
+axes.edgecolor: 343A40
+axes.labelcolor: 343A40
+axes.grid: False
+axes.unicode_minus: False
+axes.prop_cycle: cycler('color', ['002060', '18C1FF', '83BC5C', 'FFC000', 'F672A7', 'EF8B47', 'C198E0', 'BFBFBF', '343A40'])
+font.family: sans-serif
+font.sans-serif: Microsoft JhengHei, Noto Sans CJK TC, Arial Unicode MS, DejaVu Sans
+legend.fontsize: 12
+legend.frameon: True
+legend.handlelength: 2
+lines.linewidth: 2
+savefig.dpi: 300
+savefig.bbox: tight
+xtick.color: 343A40
+ytick.color: 343A40

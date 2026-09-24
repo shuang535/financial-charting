@@ -1,0 +1,5 @@
+interface:
+  display_name: "Financial Charting"
+  short_description: "製作一致、可重現且能直接交付的總經與金融研究圖表及 Python 程式"
+  brand_color: "#002060"
+  default_prompt: "Use $financial-charting to create a publication-ready financial time-series chart from my data."
