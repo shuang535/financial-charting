@@ -1,14 +1,44 @@
 __pycache__/
 *.py[cod]
+
+# Local secrets and configuration
+.env
+.env.*
+!.env.example
+
+# Tool and test caches
+.cache/
 .pytest_cache/
 .ruff_cache/
+.mypy_cache/
+.pyright/
+.hypothesis/
+.tox/
+.nox/
 .coverage
+.coverage.*
 htmlcov/
+coverage.xml
+junit.xml
+
+# Virtual environments and build output
 .venv/
 venv/
 dist/
 build/
 *.egg-info/
+
+# Editor and temporary files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.log
+*.tmp
+*.tmp.*
+
+# Operating-system metadata
 .DS_Store
 Thumbs.db
 Desktop.ini
