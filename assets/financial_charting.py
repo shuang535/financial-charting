@@ -93,7 +93,12 @@ def chart_style(
         yield
 
 
-def _prepare_time_series(series: pd.Series, argument_name: str) -> pd.Series:
+def _prepare_time_series(
+    series: pd.Series,
+    argument_name: str,
+    *,
+    require_complete: bool = False,
+) -> pd.Series:
     if not isinstance(series, pd.Series):
         raise TypeError(f"{argument_name} must be a pandas Series")
     if not isinstance(series.index, pd.DatetimeIndex):
@@ -101,9 +106,17 @@ def _prepare_time_series(series: pd.Series, argument_name: str) -> pd.Series:
     if series.index.has_duplicates:
         raise ValueError(f"{argument_name}.index contains duplicate timestamps")
 
-    prepared = pd.to_numeric(series.copy(), errors="coerce").sort_index().dropna()
-    if prepared.empty:
+    numeric = pd.to_numeric(series.copy(), errors="coerce")
+    if (series.notna() & numeric.isna()).any():
+        raise ValueError(f"{argument_name} contains non-numeric values")
+    prepared = numeric.sort_index()
+    if not prepared.notna().any():
         raise ValueError(f"{argument_name} has no numeric observations")
+    if np.isinf(prepared.to_numpy(dtype=float, na_value=np.nan)).any():
+        raise ValueError(f"{argument_name} contains infinite values")
+    if require_complete and prepared.isna().any():
+        raise ValueError(f"{argument_name} contains missing values; align the sample first")
+    # WHY: dropping interior NaN would draw a line across unobserved periods.
     return prepared.astype(float)
 
 
@@ -115,7 +128,7 @@ def _slice_series(
     lower = pd.Timestamp(start) if start is not None else series.index.min()
     upper = pd.Timestamp(end) if end is not None else series.index.max()
     sliced = series.loc[lower:upper]
-    if sliced.empty:
+    if not sliced.notna().any():
         raise ValueError("The selected date range has no observations")
     return sliced
 
@@ -203,12 +216,38 @@ def _finish_figure(fig: Figure, has_source: bool) -> None:
     fig.tight_layout(rect=(0.0, bottom, 1.0, 1.0))
 
 
+def align_zero_axes(primary_ax: Axes, secondary_ax: Axes) -> None:
+    """Center zero on two linear axes by expanding, never shrinking, limits.
+
+    Call after plotting all data. Existing limits and finite data bounds are
+    retained. Centered zeros do not imply comparable units or amplitudes.
+    Logarithmic and inverted axes are unsupported and left unchanged on error.
+    """
+    axes = (primary_ax, secondary_ax)
+    for axis in axes:
+        if axis.get_yscale() != "linear" or axis.yaxis_inverted():
+            raise ValueError("zero alignment requires non-inverted linear axes")
+    for axis in axes:
+        bounds = np.asarray((*axis.get_ylim(), *axis.dataLim.intervaly))
+        finite_bounds = bounds[np.isfinite(bounds)]
+        extent = float(np.max(np.abs(finite_bounds)))
+        if extent == 0.0:
+            extent = 1.0
+        axis.set_ylim(-extent, extent)
+
+
 def plot_two_series(
     left: pd.Series,
     right: pd.Series,
     *,
     secondary_y: bool = False,
     labels: tuple[str, str] | None = None,
+    y_labels: tuple[str, str] | None = None,
+    kinds: tuple[Literal["line", "bar"], Literal["line", "bar"]] = ("line", "line"),
+    colors: tuple[str, str] = (BRAND_COLORS[0], BRAND_COLORS[1]),
+    bar_width_days: float | None = None,
+    legend_location: str = "upper left",
+    legend_ncol: int = 1,
     title: str | None = None,
     source: str | None = None,
     start: DateLike | None = None,
@@ -221,7 +260,22 @@ def plot_two_series(
     figsize: tuple[float, float] = (8.0, 5.0),
     ax: Axes | None = None,
 ) -> tuple[Figure, Axes, Axes | None]:
-    """Plot two financial time series on one axis or two explicit axes."""
+    """Plot prepared time series, preserving NaN gaps and caller metadata.
+
+    ``kinds`` selects each series' geometry. Bars require a positive explicit
+    ``bar_width_days`` appropriate to the input frequency. ``y_labels`` includes
+    units; with a shared axis its first entry labels that axis. For a mixed
+    twin-axis chart the line is drawn above bars with a transparent axes patch.
+    Sample alignment, transformations and policy conditions belong to callers.
+    """
+    if len(kinds) != 2 or any(kind not in {"line", "bar"} for kind in kinds):
+        raise ValueError("kinds must contain two 'line' or 'bar' entries")
+    if "bar" in kinds and (
+        bar_width_days is None
+        or not np.isfinite(bar_width_days)
+        or bar_width_days <= 0
+    ):
+        raise ValueError("bars require a positive finite bar_width_days")
     left_data = _slice_series(_prepare_time_series(left, "left"), start, end)
     right_data = _slice_series(_prepare_time_series(right, "right"), start, end)
 
@@ -240,12 +294,40 @@ def plot_two_series(
         )
     right_label = f"{labels[1]} (RHS)" if secondary_y else labels[1]
 
-    primary_ax.plot(left_data.index, left_data, color=BRAND_COLORS[0], label=labels[0])
-    right_ax.plot(right_data.index, right_data, color=BRAND_COLORS[1], label=right_label)
+    for axis, data, kind, color, label in zip(
+        (primary_ax, right_ax),
+        (left_data, right_data),
+        kinds,
+        colors,
+        (labels[0], right_label),
+    ):
+        if kind == "bar":
+            visible = data.dropna()
+            axis.bar(
+                visible.index, visible, width=bar_width_days,
+                color=color, label=label, zorder=1,
+            )
+        else:
+            axis.plot(data.index, data, color=color, label=label, zorder=3)
+
+    if secondary_ax is not None and kinds[0] != kinds[1]:
+        line_ax, bar_ax = (
+            (primary_ax, secondary_ax) if kinds[0] == "line"
+            else (secondary_ax, primary_ax)
+        )
+        # WHY: artist zorder alone cannot order artists across twinned axes.
+        line_ax.set_zorder(bar_ax.get_zorder() + 1)
+        line_ax.patch.set_visible(False)
     if secondary_y:
-        primary_ax.tick_params(axis="y", colors=BRAND_COLORS[0])
+        primary_ax.tick_params(axis="y", colors=colors[0])
     if secondary_ax is not None:
-        secondary_ax.tick_params(axis="y", colors=BRAND_COLORS[1])
+        secondary_ax.tick_params(axis="y", colors=colors[1])
+    if y_labels is not None:
+        primary_ax.set_ylabel(y_labels[0])
+        if secondary_y:
+            primary_ax.yaxis.label.set_color(colors[0])
+        if secondary_ax is not None:
+            secondary_ax.set_ylabel(y_labels[1], color=colors[1])
 
     if left_ylim is not None:
         primary_ax.set_ylim(*left_ylim)
@@ -254,13 +336,25 @@ def plot_two_series(
     if periods:
         shade_periods(primary_ax, periods, label=period_label)
 
-    lower = min(left_data.index.min(), right_data.index.min())
-    upper = max(left_data.index.max(), right_data.index.max())
+    lower = min(left_data.first_valid_index(), right_data.first_valid_index())
+    upper = max(left_data.last_valid_index(), right_data.last_valid_index())
+    if "bar" in kinds:
+        for data, kind in zip((left_data, right_data), kinds):
+            if kind == "bar":
+                half_width = pd.Timedelta(days=bar_width_days / 2)
+                lower = min(lower, data.first_valid_index() - half_width)
+                upper = max(upper, data.last_valid_index() + half_width)
     primary_ax.set_xlim(lower, upper)
     primary_ax.set_title(title or "")
     primary_ax.grid(False)
     configure_time_axis(primary_ax, year_step)
-    merge_legends(primary_ax, secondary_ax)
+    legend_ax = (
+        secondary_ax
+        if secondary_ax is not None and secondary_ax.get_zorder() > primary_ax.get_zorder()
+        else primary_ax
+    )
+    other_ax = primary_ax if legend_ax is secondary_ax else secondary_ax
+    merge_legends(legend_ax, other_ax, location=legend_location, ncol=legend_ncol)
     if source:
         add_source_note(fig, source)
     _finish_figure(fig, source is not None)
@@ -320,7 +414,7 @@ def plot_seasonality(
 
     mean = baseline.mean(axis=1)
     std = baseline.std(axis=1)
-    current_year = int(data.index.max().year)
+    current_year = int(data.last_valid_index().year)
     complete_years = [int(year) for year in pivot.columns if pivot[year].count() == 12]
     history_years = [year for year in complete_years if year != current_year]
     history_years = history_years[-recent_complete_years:]
@@ -352,15 +446,15 @@ def plot_seasonality(
         )
 
     if include_current_year and current_year in pivot.columns:
-        current = pivot[current_year].dropna()
-        if not current.empty and current_year not in history_years:
+        current = pivot[current_year]
+        if current.notna().any() and current_year not in history_years:
             chart_ax.plot(
                 current.index,
                 current.values,
                 marker="o",
                 linewidth=3,
                 color="#EF4444",
-                label=f"{current_year} (YTD)" if len(current) < 12 else str(current_year),
+                label=f"{current_year} (YTD)" if current.count() < 12 else str(current_year),
             )
 
     labels = list(month_labels) if month_labels is not None else list(calendar.month_abbr[1:])
@@ -380,12 +474,16 @@ def plot_seasonality(
 def _prepare_regression_data(x: pd.Series, y: pd.Series) -> pd.DataFrame:
     if not isinstance(x, pd.Series) or not isinstance(y, pd.Series):
         raise TypeError("x and y must be pandas Series")
+    if x.index.has_duplicates or y.index.has_duplicates:
+        raise ValueError("x and y indices must be unique")
     frame = pd.concat(
         [pd.to_numeric(x, errors="coerce"), pd.to_numeric(y, errors="coerce")],
         axis=1,
         join="inner",
     ).dropna()
     frame.columns = ["x", "y"]
+    if not np.isfinite(frame.to_numpy(dtype=float)).all():
+        raise ValueError("regression observations must be finite")
     if len(frame) < 3:
         raise ValueError("At least three aligned numeric observations are required")
     return frame.astype(float)
@@ -435,6 +533,7 @@ def plot_regression(
     title: str | None = None,
     x_label: str | None = None,
     y_label: str | None = None,
+    show_stats: bool = True,
     figsize: tuple[float, float] = (6.0, 6.0),
     ax: Axes | None = None,
 ) -> tuple[Figure, Axes, RegressionStats]:
@@ -465,14 +564,15 @@ def plot_regression(
         f"{equation}\nR² = {stats.r_squared:.3f}\n"
         f"t(slope) = {stats.t_stat_slope:.2f}\nn = {stats.n_obs}"
     )
-    chart_ax.text(
-        0.03,
-        0.97,
-        annotation,
-        transform=chart_ax.transAxes,
-        va="top",
-        bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.8},
-    )
+    if show_stats:
+        chart_ax.text(
+            0.03,
+            0.97,
+            annotation,
+            transform=chart_ax.transAxes,
+            va="top",
+            bbox={"boxstyle": "round", "facecolor": "white", "alpha": 0.8},
+        )
     chart_ax.set_xlabel(x_label or (str(x.name) if x.name is not None else "x"))
     chart_ax.set_ylabel(y_label or (str(y.name) if y.name is not None else "y"))
     chart_ax.set_title(title or "")
@@ -529,6 +629,8 @@ def plot_grouped_regression(
         label = _display_name(group, group_labels)
         if show_stats:
             label = f"{label} (R²={stats.r_squared:.2f}, n={stats.n_obs})"
+        else:
+            label = f"{label} (n={stats.n_obs})"
         chart_ax.scatter(
             group_frame["x"],
             group_frame["y"],
@@ -569,7 +671,7 @@ def plot_annual_bars(
     if aggregation == "mean":
         annual = grouped.mean()
     elif aggregation == "sum":
-        annual = grouped.sum()
+        annual = grouped.sum(min_count=1)
     else:
         annual = grouped.last()
 
@@ -1329,8 +1431,12 @@ def plot_underperformance_diagnostics(
     """Show when a strategy loses value relative to its benchmark."""
     if rolling_window < 2:
         raise ValueError("rolling_window must be at least 2")
-    strategy = _prepare_time_series(strategy_returns, "strategy_returns")
-    benchmark = _prepare_time_series(benchmark_returns, "benchmark_returns")
+    strategy = _prepare_time_series(
+        strategy_returns, "strategy_returns", require_complete=True,
+    )
+    benchmark = _prepare_time_series(
+        benchmark_returns, "benchmark_returns", require_complete=True,
+    )
     if not strategy.index.equals(benchmark.index):
         raise ValueError("strategy_returns and benchmark_returns need identical dates")
     if strategy.le(-1.0).any() or benchmark.le(-1.0).any():
@@ -1789,12 +1895,15 @@ def save_figure(
     *,
     dpi: int = 300,
     create_parent: bool = True,
+    bbox_inches: Literal["tight"] | None = "tight",
 ) -> Path:
-    """Save a figure explicitly and return the resolved output path."""
+    """Save explicitly; bbox_inches=None preserves the physical canvas size."""
     path = Path(output_path).expanduser()
     if not path.suffix:
         path = path.with_suffix(".png")
     if create_parent:
         path.parent.mkdir(parents=True, exist_ok=True)
-    fig.savefig(path, dpi=dpi, bbox_inches="tight")
+    # WHY: None otherwise falls back to a style's savefig.bbox='tight'.
+    with rc_context({"savefig.bbox": bbox_inches}):
+        fig.savefig(path, dpi=dpi, bbox_inches=bbox_inches)
     return path.resolve()
