@@ -19,6 +19,15 @@
 
 ## 資料契約與時間語意
 
+### 政策狀態與事件
+
+- 分組、事件日期／區間、horizon outcome 與顯示名稱由分析層提供；繪圖函式不自行從政策利率或分數重建事件。
+- 「實際升息月份」是觀測到升息的月份；「模型緊縮區間」是提供的模型狀態；「進入緊縮事件」是提供的狀態轉換事件。三者不可統稱升息期間。
+- 圖例／註記交代分組定義所依據的已確認分類及時間語意；名稱不得暗示模型狀態就是央行實際行動。客戶揭露範圍見 [client-report-charts.md](client-report-charts.md)。
+- 政策環境比較依提供的 regime 配色，不預設按年份；圖例僅列有效分組。多 horizon 的有效 N 與最新未知 outcome 呈現見 [regression-charts.md](regression-charts.md)。
+
+### 投資組合與訊號
+
 - 投資組合比較函式的 `monthly_returns` 使用 decimal monthly returns，例如 `0.02` 代表 2%。落後期診斷可使用其他固定頻率，但策略與 Benchmark 必須同頻、同日期；所有輸入都要是排序、無重複且沒有缺值的 `DatetimeIndex` 共同樣本。
 - 累計報酬為 `cumprod(1 + r) - 1`。
 - 相對累計報酬為 `strategy wealth / benchmark wealth - 1`，不是逐月報酬率直接相減後累加。

@@ -13,6 +13,7 @@ description: 使用 Python、pandas 與 Matplotlib 製作或重構總經及金�
 - 驗證時間索引、頻率、單位、缺值、樣本區間與發布時點。不得用補值或對齊方式暗中製造關係。
 - 優先使用 Matplotlib object-oriented API；用 `fig`、`ax` 操作，不依賴 `plt.gcf()`、`plt.xlim()` 等全域狀態。
 - 繪圖函式回傳 `Figure` 與 `Axes`，只有呼叫端明確要求時才存檔或顯示。
+- 需要自由挑選圖表時分別回傳獨立圖片；只有共用時間軸或比較面板等目的明確時才組圖，不預設產生多套版本。
 - 使用雙軸前先確認兩序列量綱不同且比較走勢有分析目的；同量綱資料優先共用單軸。
 - 圖表要標示標題、單位、資料來源、樣本或轉換方式中會影響解讀的資訊。預測區間與歷史資料必須有可辨識的分界。
 - 保持 import-safe：匯入模組不得讀寫檔案、連線資料源或永久修改全域繪圖設定。
@@ -25,12 +26,15 @@ description: 使用 Python、pandas 與 Matplotlib 製作或重構總經及金�
 - 累計／相對報酬、回測落後期診斷、訊號確認、Regime dashboard 與熱圖：讀 [references/regime-charts.md](references/regime-charts.md)。
 - 績效摘要、逐年績效、Benchmark 勝率、Regime return 與 Drawdown episodes：讀 [references/performance-tables.md](references/performance-tables.md)。
 - 色彩、標註、尺度與交付檢查：讀 [references/chart-design.md](references/chart-design.md)。
+- 總經時間序列比較、景氣調查或季節圖，希望沿用既有總經研究呈現習慣時：另讀 [references/macro-chart-conventions.md](references/macro-chart-conventions.md)；這些是情境偏好，不取代圖型規格或專案設定。
+- 圖表要嵌入 Word、客戶／研究報告或小尺寸雙欄版面：另讀 [references/client-report-charts.md](references/client-report-charts.md)，並搭配適用的圖型 reference。
 
 ## 可重用資產
 
-- `assets/financial_charting.py` 提供無資料庫依賴的 helper。需要在專案中落地繪圖程式時，可複製或依現有架構改寫；不要假設所有專案已安裝它。
+- `assets/financial_charting.py` 提供選用、無資料庫依賴的 helper；可用既有專案程式或直接 Matplotlib，不強制使用 toolkit。不要假設所有專案已安裝它。新增呈現功能接收已完成的分析結果，不在繪圖內推導分位數、未來變化或政策事件。
 - `assets/cathaysite.mplstyle` 提供選用的品牌色、中文字型 fallback、DPI 與基礎排版。只有交付物明確需要該品牌格式時才套用；若專案已有設計系統，沿用專案設定。
 - 圖表不預設資料來源或機構署名；呼叫端應依實際資料與交付情境明確傳入。
+- 研究方法、報告故事線、正文、投資結論及 Word 組版由 `macro-research-report` 負責；本 skill 處理呈現、輸入契約與圖表交付。
 
 ## 完成前檢查
 
